@@ -1,0 +1,1002 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>玩家点位查询工具</title>
+    <style>
+        body {
+            font-family: "Microsoft YaHei", sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .input-area {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 30px;
+        }
+        #blueInput {
+            flex: 1;
+            padding: 12px;
+            font-size: 16px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            outline: none;
+        }
+        #blueInput:focus {
+            border-color: #4285f4;
+        }
+        button {
+            padding: 12px 20px;
+            background-color: #4285f4;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #3367d6;
+        }
+        .result-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 30px;
+        }
+        .result-area {
+            flex: 1;
+            min-width: 300px;
+            padding: 20px;
+            border-radius: 5px;
+            min-height: 300px;
+        }
+        .graph-area {
+            flex: 1;
+            min-width: 300px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .result-item {
+            margin: 10px 0;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border-radius: 5px;
+        }
+        .result-label {
+            font-weight: bold;
+            color: #555;
+        }
+        .not-found {
+            color: #d93025;
+            text-align: center;
+            padding: 20px;
+        }
+        .instructions {
+            color: #666;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+        svg {
+            max-width: 100%;
+            max-height: 400px;
+        }
+        .vertex {
+            stroke-width: 2;
+            stroke: #333;
+        }
+        .blue-vertex {
+            fill: #4285f4;
+        }
+        .red-vertex {
+            fill: #d93025;
+        }
+        .vertex-text {
+            font-size: 14px;
+            font-weight: bold;
+            text-anchor: middle;
+            dominant-baseline: middle;
+            fill: white;
+        }
+        .connection { /* 对应关系连线（红色） */
+            stroke: #d93025;
+            stroke-width: 2;
+        }
+        .green-line-connection { /* 奶妈绿线（绿色加粗虚线） */
+            stroke: #34a853;
+            stroke-width: 3;
+            stroke-dasharray: 5, 3; /* 虚线样式 */
+        }
+        .arrowhead { /* 对应关系箭头（红色） */
+            fill: #d93025;
+        }
+        .green-line-arrowhead { /* 奶妈绿线箭头（绿色） */
+            fill: #34a853;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>玩家点位查询工具</h1>
+        <p class="instructions">提示：输入4个数字（1-8）的玩家点位（如1256），自动匹配排序后结果，支持回车键查询</p>
+        <div class="input-area">
+            <input type="text" id="blueInput" placeholder="输入玩家点位（例如1256）" maxlength="4">
+            <button onclick="queryResult()">查询</button>
+        </div>
+        <div class="result-container">
+            <div class="result-area" id="resultArea">
+                <!-- 结果将在这里显示 -->
+            </div>
+            <div class="graph-area" id="graphArea">
+                <!-- 图形将在这里显示 -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 完整数据
+        const data = [
+            // 模式1
+            {
+                "玩家点位": "1234",
+                "NPC点位": "5678",
+                "对应关系": "1-7、2-8、3-5、4-6",
+                "缺口": "2-3、6-7",
+                "安全点": "6、7",
+                "奶妈绿线": "5-6、6-7、7-8"
+            },
+            {
+                "玩家点位": "2345",
+                "NPC点位": "1678",
+                "对应关系": "2-8、3-1、4-6、5-7",
+                "缺口": "3-4、7-8",
+                "安全点": "7、8",
+                "奶妈绿线": "6-7、7-8、8-1"
+            },
+            {
+                "玩家点位": "3456",
+                "NPC点位": "1278",
+                "对应关系": "3-1、4-2、5-7、6-8",
+                "缺口": "4-5、8-1",
+                "安全点": "8、1",
+                "奶妈绿线": "7-8、8-1、1-2"
+            },
+            {
+                
+                "玩家点位": "4567",
+                "NPC点位": "1238",
+                "对应关系": "4-2、5-3、6-8、7-1",
+                "缺口": "5-6、1-2",
+                "安全点": "1、2",
+                "奶妈绿线": "8-1、1-2、2-3"
+            },
+            {
+                
+                "玩家点位": "5678",
+                "NPC点位": "1234",
+                "对应关系": "5-3、6-4、7-1、8-2",
+                "缺口": "6-7、2-3",
+                "安全点": "2、3",
+                "奶妈绿线": "1-2、2-3、3-4"
+            },
+            {
+                
+                "玩家点位": "1678",
+                "NPC点位": "2345",
+                "对应关系": "6-4、7-5、8-2、1-3",
+                "缺口": "7-8、3-4",
+                "安全点": "3、4",
+                "奶妈绿线": "2-3、3-4、4-5"
+            },
+            {
+                
+                "玩家点位": "1278",
+                "NPC点位": "3456",
+                "对应关系": "7-5、8-6、1-3、2-4",
+                "缺口": "8-1、4-5",
+                "安全点": "4、5",
+                "奶妈绿线": "3-4、4-5、5-6"
+            },
+            {
+                
+                "玩家点位": "1238",
+                "NPC点位": "4567",
+                "对应关系": "8-6、1-7、2-4、3-5",
+                "缺口": "1-2、5-6",
+                "安全点": "5、6",
+                "奶妈绿线": "4-5、5-6、6-7"
+            },
+
+            // 模式2
+            {
+                
+                "玩家点位": "1567",
+                "NPC点位": "2348",
+                "对应关系": "1-2、5-3、6-4、7-8",
+                "缺口": "1-8、2-3、6-7",
+                "安全点": "2、3",
+                "奶妈绿线": "2-3、3-4"
+            },
+            {
+                
+                "玩家点位": "2678",
+                "NPC点位": "1345",
+                "对应关系": "2-3、6-4、7-5、8-1",
+                "缺口": "2-1、3-4、7-8",
+                "安全点": "3、4",
+                "奶妈绿线": "3-4、4-5"
+            },
+            {
+                
+                "玩家点位": "1378",
+                "NPC点位": "2456",
+                "对应关系": "3-4、7-5、8-6、1-2",
+                "缺口": "3-2、4-5、8-1",
+                "安全点": "4、5",
+                "奶妈绿线": "4-5、5-6"
+            },
+            {
+                
+                "玩家点位": "1248",
+                "NPC点位": "3567",
+                "对应关系": "4-5、8-6、1-7、2-3",
+                "缺口": "4-3、5-6、1-2",
+                "安全点": "5、6",
+                "奶妈绿线": "5-6、6-7"
+            },
+            {
+                
+                "玩家点位": "1235",
+                "NPC点位": "4678",
+                "对应关系": "5-6、1-7、2-8、3-4",
+                "缺口": "5-4、6-7、2-3",
+                "安全点": "6、7",
+                "奶妈绿线": "6-7、7-8"
+            },
+            {
+                
+                "玩家点位": "2346",
+                "NPC点位": "1578",
+                "对应关系": "6-7、2-8、3-1、4-5",
+                "缺口": "6-5、7-8、3-4",
+                "安全点": "7、8",
+                "奶妈绿线": "7-8、8-1"
+            },
+            {
+                
+                "玩家点位": "3457",
+                "NPC点位": "1268",
+                "对应关系": "7-8、3-1、4-2、5-6",
+                "缺口": "7-6、8-1、4-5",
+                "安全点": "8、1",
+                "奶妈绿线": "8-1、1-2"
+            },
+            {
+                
+                "玩家点位": "4568",
+                "NPC点位": "1237",
+                "对应关系": "8-1、4-2、5-3、6-7",
+                "缺口": "8-7、1-2、5-6",
+                "安全点": "1、2",
+                "奶妈绿线": "1-2、2-3"
+            },
+
+            // 模式3（补充完整）
+            {
+                
+                "玩家点位": "1236",
+                "NPC点位": "4578",
+                "对应关系": "1-7、2-8、3-4、6-5",
+                "缺口": "2-3、4-5、6-7",
+                "安全点": "5、7",
+                "奶妈绿线": "4-5、7-8"
+            },
+            {
+                
+                "玩家点位": "2347",
+                "NPC点位": "1568",
+                "对应关系": "2-8、3-1、4-5、7-6",
+                "缺口": "3-4、5-6、7-8",
+                "安全点": "6、8",
+                "奶妈绿线": "5-6、8-1"
+            },
+            {
+                
+                "玩家点位": "3458",
+                "NPC点位": "1267",
+                "对应关系": "3-1、4-2、5-6、8-7",
+                "缺口": "4-5、6-7、8-1",
+                "安全点": "7、1",
+                "奶妈绿线": "6-7、1-2"
+            },
+            {
+                
+                "玩家点位": "1456",
+                "NPC点位": "2378",
+                "对应关系": "4-2、5-3、6-7、1-8",
+                "缺口": "5-6、7-8、1-2",
+                "安全点": "8、2",
+                "奶妈绿线": "7-8、2-3"
+            },
+            {
+                
+                "玩家点位": "2567",
+                "NPC点位": "1348",
+                "对应关系": "5-3、6-4、7-8、2-1",
+                "缺口": "6-7、8-1、2-3",
+                "安全点": "1、3",
+                "奶妈绿线": "8-1、3-4"
+            },
+            {
+                
+                "玩家点位": "3678",
+                "NPC点位": "1245",
+                "对应关系": "6-4、7-5、8-1、3-2",
+                "缺口": "7-8、1-2、3-4",
+                "安全点": "2、4",
+                "奶妈绿线": "1-2、4-5"
+            },
+            {
+                
+                "玩家点位": "1478",
+                "NPC点位": "2356",
+                "对应关系": "7-5、8-6、1-2、4-3",
+                "缺口": "8-1、2-3、4-5",
+                "安全点": "3、5",
+                "奶妈绿线": "2-3、5-6"
+            },
+            {
+                
+                "玩家点位": "1258",
+                "NPC点位": "3467",
+                "对应关系": "8-6、1-7、2-3、5-4",
+                "缺口": "1-2、3-4、5-6",
+                "安全点": "4、6",
+                "奶妈绿线": "3-4、6-7"
+            },
+
+            // 模式4（补充完整）
+            {
+                
+                "玩家点位": "1237",
+                "NPC点位": "4568",
+                "对应关系": "1-8、2-4、3-5、7-6",
+                "缺口": "1-2、5-6、7-8",
+                "安全点": "5、6",
+                "奶妈绿线": "4-5、5-6"
+            },
+            {
+                
+                "玩家点位": "2348",
+                "NPC点位": "1567",
+                "对应关系": "2-1、3-5、4-6、8-7",
+                "缺口": "2-3、6-7、8-1",
+                "安全点": "6、7",
+                "奶妈绿线": "5-6、6-7"
+            },
+            {
+                
+                "玩家点位": "1345",
+                "NPC点位": "2678",
+                "对应关系": "3-2、4-6、5-7、1-8",
+                "缺口": "3-4、7-8、1-2",
+                "安全点": "7、8",
+                "奶妈绿线": "6-7、7-8"
+            },
+            {
+                
+                "玩家点位": "2456",
+                "NPC点位": "1378",
+                "对应关系": "4-3、5-7、6-8、2-1",
+                "缺口": "4-5、8-1、2-3",
+                "安全点": "8、1",
+                "奶妈绿线": "7-8、8-1"
+            },
+            {
+                
+                "玩家点位": "3567",
+                "NPC点位": "1248",
+                "对应关系": "5-4、6-8、7-1、3-2",
+                "缺口": "5-6、1-2、3-4",
+                "安全点": "1、2",
+                "奶妈绿线": "8-1、1-2"
+            },
+            {
+                
+                "玩家点位": "4678",
+                "NPC点位": "1235",
+                "对应关系": "6-5、7-1、8-2、4-3",
+                "缺口": "6-7、2-3、4-5",
+                "安全点": "2、3",
+                "奶妈绿线": "1-2、2-3"
+            },
+            {
+                
+                "玩家点位": "1578",
+                "NPC点位": "2346",
+                "对应关系": "7-6、8-2	、1-3、5-4",
+                "缺口": "7-8、3-4、5-6",
+                "安全点": "3、4",
+                "奶妈绿线": "2-3、3-4"
+            },
+            {
+                
+                "玩家点位": "1268",
+                "NPC点位": "3457",
+                "对应关系": "8-7、1-3、2-4、6-5",
+                "缺口": "8-1、4-5、6-7",
+                "安全点": "4、5",
+                "奶妈绿线": "3-4、4-5"
+            },
+
+            // 模式5（补充完整）
+            {
+                
+                "玩家点位": "1245",
+                "NPC点位": "3678",
+                "对应关系": "1-7、2-8、4-3、5-6",
+                "缺口": "2-3、4-5、6-7",
+                "安全点": "6、8",
+                "奶妈绿线": "6-7、7-8"
+            },
+            {
+                
+                "玩家点位": "2356",
+                "NPC点位": "1478",
+                "对应关系": "2-8、3-1、5-4、6-7",
+                "缺口": "3-4、5-6、7-8",
+                "安全点": "7、1",
+                "奶妈绿线": "7-8、8-1"
+            },
+            {
+                
+                "玩家点位": "3467",
+                "NPC点位": "1258",
+                "对应关系": "3-1、4-2、6-5、7-8",
+                "缺口": "4-5、6-7、8-1",
+                "安全点": "8、2",
+                "奶妈绿线": "8-1、1-2"
+            },
+            {
+                
+                "玩家点位": "4578",
+                "NPC点位": "1236",
+                "对应关系": "4-2、5-3、7-6、8-1",
+                "缺口": "5-6、7-8、1-2",
+                "安全点": "1、3",
+                "奶妈绿线": "1-2、2-3"
+            },
+            {
+                
+                "玩家点位": "1568",
+                "NPC点位": "2347",
+                "对应关系": "5-3、6-4、8-7、1-2",
+                "缺口": "6-7、8-1、2-3",
+                "安全点": "2、4",
+                "奶妈绿线": "2-3、3-4"
+            },
+            {
+                
+                "玩家点位": "1267",
+                "NPC点位": "3458",
+                "对应关系": "6-4、7-5、1-8、2-3",
+                "缺口": "7-8、1-2、3-4",
+                "安全点": "3、5",
+                "奶妈绿线": "3-4、4-5"
+            },
+            {
+                
+                "玩家点位": "2378",
+                "NPC点位": "1456",
+                "对应关系": "7-5、8-6、2-1、3-4",
+                "缺口": "8-1、2-3、4-5",
+                "安全点": "4、6",
+                "奶妈绿线": "4-5、5-6"
+            },
+            {
+                
+                "玩家点位": "1348",
+                "NPC点位": "2567",
+                "对应关系": "8-6、1-7、3-2、4-5",
+                "缺口": "1-2、3-4、5-6",
+                "安全点": "5、7",
+                "奶妈绿线": "5-6、6-7"
+            },
+
+            // 模式6（补充完整）
+            {
+                
+                "玩家点位": "1246",
+                "NPC点位": "3578",
+                "对应关系": "1-8、2-3、4-5、6-7",
+                "缺口": "1-2、3-4、5-6、7-8",
+                "安全点": "5、8",
+                "奶妈绿线": "7-8"
+            },
+            {
+                
+                "玩家点位": "2357",
+                "NPC点位": "1468",
+                "对应关系": "2-1、3-4、5-6、7-8",
+                "缺口": "2-3、4-5、6-7、8-1",
+                "安全点": "6、1",
+                "奶妈绿线": "8-1"
+            },
+            {
+                
+                "玩家点位": "3468",
+                "NPC点位": "1257",
+                "对应关系": "3-2、4-5、6-7、8-1",
+                "缺口": "3-4、5-6、7-8、1-2",
+                "安全点": "7、2",
+                "奶妈绿线": "1-2"
+            },
+            {
+                
+                "玩家点位": "1457",
+                "NPC点位": "2368",
+                "对应关系": "4-3、5-6、7-8、1-2",
+                "缺口": "4-5、6-7、8-1、2-3",
+                "安全点": "8、3",
+                "奶妈绿线": "2-3"
+            },
+            {
+                
+                "玩家点位": "2568",
+                "NPC点位": "1347",
+                "对应关系": "5-4、6-7、8-1、2-3",
+                "缺口": "5-6、7-8、1-2、3-4",
+                "安全点": "1、4",
+                "奶妈绿线": "3-4"
+            },
+            {
+                
+                "玩家点位": "1367",
+                "NPC点位": "2458",
+                "对应关系": "6-5、7-8、1-2、3-4",
+                "缺口": "6-7、8-1、2-3、4-5",
+                "安全点": "2、5",
+                "奶妈绿线": "4-5"
+            },
+            {
+                
+                "玩家点位": "2478",
+                "NPC点位": "1356",
+                "对应关系": "7-6、8-1、2-3、4-5",
+                "缺口": "7-8、1-2、3-4、5-6",
+                "安全点": "3、6",
+                "奶妈绿线": "5-6"
+            },
+            {
+                
+                "玩家点位": "1358",
+                "NPC点位": "2467",	
+                "对应关系": "8-7、1-2、3-4、5-6",
+                "缺口": "8-1、2-3、4-5、6-7",
+                "安全点": "4、7",
+                "奶妈绿线": "6-7"
+            },
+
+            // 模式7（补充完整）
+            {
+                
+                "玩家点位": "1247",
+                "NPC点位": "3568",
+                "对应关系": "1-8、2-3、4-5、7-6",
+                "缺口": "1-2、3-4、5-6、7-8",
+                "安全点": "3、8",
+                "奶妈绿线": "5-6"
+            },
+            {
+                
+                "玩家点位": "2358",
+                "NPC点位": "1467",
+                "对应关系": "2-1、3-4、5-6、8-7",
+                "缺口": "2-3、4-5、6-7、8-1",
+                "安全点": "4、1",
+                "奶妈绿线": "6-7"
+            },
+            {
+                
+                "玩家点位": "1346",
+                "NPC点位": "2578",
+                "对应关系": "3-2、4-5、6-7、1-8",
+                "缺口": "3-4、5-6、7-8、1-2",
+                "安全点": "5、2",
+                "奶妈绿线": "7-8"
+            },
+            {
+                
+                "玩家点位": "2457",
+                "NPC点位": "1368",
+                "对应关系": "4-3、5-6、7-8、2-1",
+                "缺口": "4-5、6-7、8-1、2-3",
+                "安全点": "6、3",
+                "奶妈绿线": "8-1"
+            },
+            {
+                
+                "玩家点位": "3568",
+                "NPC点位": "1247",
+                "对应关系": "5-4、6-7、8-1、3-2",
+                "缺口": "5-6、7-8、1-2、3-4",
+                "安全点": "7、4",
+                "奶妈绿线": "1-2"
+            },
+            {
+                
+                "玩家点位": "1467",
+                "NPC点位": "2358",
+                "对应关系": "6-5、7-8、1-2、4-3",
+                "缺口": "6-7、8-1、2-3、4-5",
+                "安全点": "8、5",
+                "奶妈绿线": "2-3"
+            },
+            {
+                
+                "玩家点位": "2578",
+                "NPC点位": "1346",
+                "对应关系": "7-6、8-1、2-3、5-4",
+                "缺口": "7-8、1-2、3-4、5-6",
+                "安全点": "1、6",
+                "奶妈绿线": "3-4"
+            },
+            {
+                
+                "玩家点位": "1368",
+                "NPC点位": "2457",
+                "对应关系": "8-7、1-2、3-4、6-5",
+                "缺口": "8-1、2-3、4-5、6-7",
+                "安全点": "2、7",
+                "奶妈绿线": "4-5"
+            },
+
+            // 模式8（补充完整）
+            {
+                
+                "玩家点位": "1256",
+                "NPC点位": "3478",
+                "对应关系": "1-8、2-3、5-4、6-7",
+                "缺口": "1-2、3-4、5-6、7-8",
+                "安全点": "无",
+                "奶妈绿线": "3-4、7-8"
+            },
+            {
+                
+                "玩家点位": "2367",
+                "NPC点位": "1458",
+                "对应关系": "2-1、3-4、6-5、7-8",
+                "缺口": "2-3、4-5、6-7、8-1",
+                "安全点": "无",
+                "奶妈绿线": "4-5、8-1"
+            },
+            {
+                
+                "玩家点位": "3478",
+                "NPC点位": "1256",
+                "对应关系": "3-2、4-5、7-6、8-1",
+                "缺口": "3-4、5-6、7-8、1-2",
+                "安全点": "无",
+                "奶妈绿线": "5-6、1-2"
+            },
+            {
+                
+                "玩家点位": "1458",
+                "NPC点位": "2367",
+                "对应关系": "4-3、5-6、8-7、1-2",
+                "缺口": "4-5、6-7、8-1、2-3",
+                "安全点": "无",
+                "奶妈绿线": "6-7、2-3"
+            },
+            {
+                
+                "玩家点位": "1256",
+                "NPC点位": "3478",
+                "对应关系": "5-4、6-7、1-8、2-3",
+                "缺口": "5-6、7-8、1-2、3-4",
+                "安全点": "无",
+                "奶妈绿线": "7-8、3-4"
+            },
+            {
+                
+                "玩家点位": "2367",
+                "NPC点位": "1458",
+                "对应关系": "6-5、7-8、2-1、3-4",
+                "缺口": "6-7、8-1、2-3、4-5",
+                "安全点": "无",
+                "奶妈绿线": "8-1、4-5"
+            },
+            {
+                
+                "玩家点位": "3478",
+                "NPC点位": "1256",
+                "对应关系": "7-6、8-1、3-2、4-5",
+                "缺口": "7-8、1-2、3-4、5-6",
+                "安全点": "无",
+                "奶妈绿线": "1-2、5-6"
+            },
+            {
+                
+                "玩家点位": "1458",
+                "NPC点位": "2367",
+                "对应关系": "8-7、1-2、4-3、5-6",
+                "缺口": "8-1、2-3、4-5、6-7",
+                "安全点": "无",
+                "奶妈绿线": "2-3、6-7"
+            },
+
+            // 模式9（补充完整）
+            {
+                
+                "玩家点位": "1257",
+                "NPC点位": "3468",
+                "对应关系": "1-8、2-3、5-4、7-6",
+                "缺口": "1-2、3-4、5-6、7-8",
+                "安全点": "3、6",
+                "奶妈绿线": "3-4"
+            },
+            {
+                
+                "玩家点位": "2368",
+                "NPC点位": "1457",
+                "对应关系": "2-1、3-4、6-5、8-7",
+                "缺口": "2-3、4-5、6-7、8-1",
+                "安全点": "4、7",
+                "奶妈绿线": "4-5"
+            },
+            {
+                
+                "玩家点位": "1347",
+                "NPC点位": "2568",
+                "对应关系": "3-2、4-5、7-6、1-8",
+                "缺口": "3-4、5-6、7-8、1-2",
+                "安全点": "5、8",
+                "奶妈绿线": "5-6"
+            },
+            {
+                
+                "玩家点位": "2458",
+                "NPC点位": "1367",
+                "对应关系": "4-3、5-6、8-7、2-1",
+                "缺口": "4-5、6-7、8-1、2-3",
+                "安全点": "6、1",
+                "奶妈绿线": "6-7"
+            },
+            {
+                
+                "玩家点位": "1356",
+                "NPC点位": "2478",
+                "对应关系": "5-4、6-7、1-8、3-2",
+                "缺口": "5-6、7-8、1-2、3-4",
+                "安全点": "7、2",
+                "奶妈绿线": "7-8"
+            },
+            {
+                
+                "玩家点位": "2467",
+                "NPC点位": "1358",
+                "对应关系": "6-5、7-8、2-1、4-3",
+                "缺口": "6-7、8-1、2-3、4-5",
+                "安全点": "8、3",
+                "奶妈绿线": "8-1"
+            },
+            {
+                
+                "玩家点位": "3578",
+                "NPC点位": "1246",
+                "对应关系": "7-6、8-1、3-2、5-4",
+                "缺口": "7-8、8-1、2-3、4-5",
+                "安全点": "1、4",
+                "奶妈绿线": "1-2"
+            },
+            {
+                
+                "玩家点位": "1468",
+                "NPC点位": "2357",
+                "对应关系": "8-7、1-2、4-3、6-5",
+                "缺口": "8-1、1-2、3-4、5-6",
+                "安全点": "2、5",
+                "奶妈绿线": "2-3"
+            },
+
+            // 模式10（补充完整）
+            {
+                "玩家点位": "1357",
+                "NPC点位": "2468",
+                "对应关系": "1-8、3-2、5-4、7-6",
+                "缺口": "1-2、3-4、5-6、7-8",
+                "安全点": "无",
+                "奶妈绿线": "无"
+            },
+            {
+                "玩家点位": "2468",
+                "NPC点位": "1357",
+                "对应关系": "2-1、4-3、6-5、8-7",
+                "缺口": "2-3、4-5、6-7、8-1",
+                "安全点": "无",
+                "奶妈绿线": "无"
+            }
+        ];
+
+        // 工具函数：排序安全点（"无"转为"团长对面"）
+        function sortSafetyPoints(points) {
+            if (points === "无") return "团长对面";
+            return points.split('、').map(Number).sort((a, b) => a - b).join('、');
+        }
+
+        // 工具函数：排序缺口/绿线
+        function sortSegments(segments) {
+            if (segments === "无") return "无";
+            return segments.split('、')
+                .map(seg => {
+                    const [a, b] = seg.split('-').map(Number);
+                    return a < b ? `${a}-${b}` : `${b}-${a}`;
+                })
+                .sort((s1, s2) => {
+                    const num1 = parseInt(s1.split('-')[0]);
+                    const num2 = parseInt(s2.split('-')[0]);
+                    return num1 - num2;
+                })
+                .join('、');
+        }
+
+        // 生成图形（取消缺口连线，增加奶妈绿线）
+        function generateOctagon(data) {
+            const size = 150;
+            const centerX = size + 20;
+            const centerY = size + 20;
+            const vertices = 8;
+            const angle = (2 * Math.PI) / vertices;
+            
+            // 计算8个顶点坐标
+            const points = [];
+            for (let i = 0; i < vertices; i++) {
+                const currentAngle = angle * i - Math.PI / 2;
+                const x = centerX + size * Math.cos(currentAngle);
+                const y = centerY + size * Math.sin(currentAngle);
+                points.push({ x, y, num: i + 1 });
+            }
+            
+            let svg = `<svg width="${size * 2 + 40}" height="${size * 2 + 40}" viewBox="0 0 ${size * 2 + 40} ${size * 2 + 40}">`;
+            
+            // 1. 绘制对应关系连线（红色）
+            if (data.对应关系 && data.对应关系 !== "无") {
+                const connections = data.对应关系.split('、');
+                connections.forEach(conn => {
+                    const [from, to] = conn.split('-').map(Number);
+                    const fromPoint = points.find(p => p.num === from);
+                    const toPoint = points.find(p => p.num === to);
+                    
+                    if (fromPoint && toPoint) {
+                        const dx = toPoint.x - fromPoint.x;
+                        const dy = toPoint.y - fromPoint.y;
+                        const ratio = 0.9;
+                        const lineX = fromPoint.x + dx * ratio;
+                        const lineY = fromPoint.y + dy * ratio;
+                        
+                        svg += `<line class="connection" x1="${fromPoint.x}" y1="${fromPoint.y}" x2="${lineX}" y2="${lineY}" />`;
+                        
+                        // 红色箭头
+                        const arrowSize = 8;
+                        const arrowAngle = Math.PI / 6;
+                        const lineAngle = Math.atan2(dy, dx);
+                        const arrow1X = lineX + arrowSize * Math.cos(lineAngle + Math.PI - arrowAngle);
+                        const arrow1Y = lineY + arrowSize * Math.sin(lineAngle + Math.PI - arrowAngle);
+                        const arrow2X = lineX + arrowSize * Math.cos(lineAngle + Math.PI + arrowAngle);
+                        const arrow2Y = lineY + arrowSize * Math.sin(lineAngle + Math.PI + arrowAngle);
+                        
+                        svg += `<polygon class="arrowhead" points="${lineX},${lineY} ${arrow1X},${arrow1Y} ${arrow2X},${arrow2Y}" />`;
+                    }
+                });
+            }
+            
+            // 2. 新增：绘制奶妈绿线（绿色加粗虚线）
+            if (data.奶妈绿线 && data.奶妈绿线 !== "无") {
+                const greenLines = data.奶妈绿线.split('、');
+                greenLines.forEach(line => {
+                    const [from, to] = line.split('-').map(Number);
+                    const fromPoint = points.find(p => p.num === from);
+                    const toPoint = points.find(p => p.num === to);
+                    
+                    if (fromPoint && toPoint) {
+                        const dx = toPoint.x - fromPoint.x;
+                        const dy = toPoint.y - fromPoint.y;
+                        const ratio = 0.9;
+                        const lineX = fromPoint.x + dx * ratio;
+                        const lineY = fromPoint.y + dy * ratio;
+                        
+                        // 绿色虚线
+                        svg += `<line class="green-line-connection" x1="${fromPoint.x}" y1="${fromPoint.y}" x2="${lineX}" y2="${lineY}" />`;
+                        
+                        // 绿色箭头
+                        const arrowSize = 8;
+                        const arrowAngle = Math.PI / 6;
+                        const lineAngle = Math.atan2(dy, dx);
+                        const arrow1X = lineX + arrowSize * Math.cos(lineAngle + Math.PI - arrowAngle);
+                        const arrow1Y = lineY + arrowSize * Math.sin(lineAngle + Math.PI - arrowAngle);
+                        const arrow2X = lineX + arrowSize * Math.cos(lineAngle + Math.PI + arrowAngle);
+                        const arrow2Y = lineY + arrowSize * Math.sin(lineAngle + Math.PI + arrowAngle);
+                        
+                        svg += `<polygon class="green-line-arrowhead" points="${lineX},${lineY} ${arrow1X},${arrow1Y} ${arrow2X},${arrow2Y}" />`;
+                    }
+                });
+            }
+            
+            // 3. 绘制顶点
+            const playerPoints = data.玩家点位.split('').map(Number);
+            const npcPoints = data.NPC点位.split('').map(Number);
+            
+            points.forEach(p => {
+                const isPlayer = playerPoints.includes(p.num);
+                const isNPC = npcPoints.includes(p.num);
+                if (isPlayer || isNPC) {
+                    svg += `<circle class="vertex ${isPlayer ? 'blue-vertex' : 'red-vertex'}" 
+                                   cx="${p.x}" cy="${p.y}" r="15" />`;
+                    svg += `<text class="vertex-text" x="${p.x}" y="${p.y}">${p.num}</text>`;
+                }
+            });
+            
+            svg += '</svg>';
+            return svg;
+        }
+
+        // 查询函数
+        function queryResult() {
+            const input = document.getElementById("blueInput").value.trim();
+            const resultArea = document.getElementById("resultArea");
+            const graphArea = document.getElementById("graphArea");
+            
+            if (!/^\d{4}$/.test(input)) {
+                resultArea.innerHTML = '<div class="not-found">请输入4个数字（1-8）的组合</div>';
+                graphArea.innerHTML = '';
+                return;
+            }
+            
+            const sortedInput = input.split('').sort().join('');
+            const match = data.find(item => item["玩家点位"] === sortedInput);
+            
+            if (match) {
+                const processed = {
+                    "玩家点位": match["玩家点位"],
+                    "NPC点位": match["NPC点位"].split('').sort().join(''),
+                    "对应关系": match["对应关系"],
+                    "缺口": sortSegments(match["缺口"]),
+                    "安全点": sortSafetyPoints(match["安全点"]),
+                    "奶妈绿线": sortSegments(match["奶妈绿线"])
+                };
+                
+                let resultHtml = '';
+                for (const [key, value] of Object.entries(processed)) {
+                    resultHtml += `<div class="result-item"><span class="result-label">${key}：</span>${value}</div>`;
+                }
+                resultArea.innerHTML = resultHtml;
+                graphArea.innerHTML = generateOctagon(processed);
+            } else {
+                resultArea.innerHTML = `<div class="not-found">未找到玩家点位「${sortedInput}」的匹配数据</div>`;
+                graphArea.innerHTML = '';
+            }
+        }
+
+        // 支持回车键查询
+        document.getElementById("blueInput").addEventListener("keyup", function(event) {
+            if (event.key === "Enter") {
+                queryResult();
+            }
+        });
+    </script>
+</body>
+</html>
